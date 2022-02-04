@@ -130,3 +130,8 @@ dmypy.json
 
 # VSCode profile
 .vscode/
+
+final/ticks/**
+final/bars/**
+
+final/**/apikey_*.py
