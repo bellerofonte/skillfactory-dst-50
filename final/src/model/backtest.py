@@ -65,40 +65,66 @@ class StrategyResult:
             print('There is no trades here')
 
 
-class Strategy:
+class Strategy:    
+    def reset_pos(self):
+        self.pnl_open = 0
+        self.pnl_open_max = 0
+        self.pnl_open_min = 0
+        self.pos = 0
+        self.price_enter = None
+        self.index_enter = None
+        self.index_open_max = None
+        self.index_open_min = None
+        
+    
     def reset(self):
         self.trades = []
         self.equity = []
         self.pnl_real = 0
-        self.pnl_open = 0
-        self.pos = 0
-        self.price_enter = None
-        self.index_enter = None
+        self.reset_pos()
 
+        
     def run(self, data, fee_lot=0, fee_pct=0):
         # setup fields
         self.reset()
         self.fee_lot = fee_lot
         self.fee_pct = fee_pct / 100.0
-        # run strategy for each row
+        # pre-compute everything you need
+        self.prepare(data)
+        # run strategy for each data row
         data.apply(self.handle_next, axis=1)
         # close position at the end if present
         self.close(data.iloc[-1])
         # compute statistics
-        return StrategyResult(trades=pd.DataFrame(self.trades),
-                              equity=pd.DataFrame(self.equity, index=data.index))
+        return StrategyResult(pd.DataFrame(self.trades),
+                              pd.DataFrame(self.equity, index=data.index))
 
 
     def handle_next(self, row):
         self.next(row)
         self.pnl_open = (self.pos * (row.close - self.price_enter)) if self.pos != 0 else 0
+        if (self.pnl_open > self.pnl_open_max):
+            self.pnl_open_max = self.pnl_open
+            self.index_open_max = row.name
+            
+        if (self.pnl_open < self.pnl_open_min):
+            self.pnl_open_min = self.pnl_open
+            self.index_open_min = row.name
+        
         self.equity.append({
             'pos': self.pos,
             'pnl': self.pnl_open + self.pnl_real,
+            'pnl_open': self.pnl_open,
+            'pnl_open_max': self.pnl_open_max,
+            'pnl_open_min': self.pnl_open_min,
             'trd_cnt': len(self.trades)
         })
+        
 
+    def prepare(self, data):
+        raise NotImplementedError('This method is not implemented')
 
+        
     def next(self, row):
         raise NotImplementedError('This method is not implemented')
 
@@ -125,14 +151,14 @@ class Strategy:
                 'price_exit': trd_price,
                 'index_enter': self.index_enter,
                 'index_exit': row.name,
+                'index_max': self.index_open_max,
+                'index_min': self.index_open_min,
                 'fee': fee,
                 'pnl': (self.pos * (trd_price - self.price_enter)) - fee
             }
             self.trades.append(trd)
             self.pnl_real += trd['pnl']
-            self.pos = 0
-            self.price_enter = None
-            self.index_enter = None
+            self.reset_pos()
 
 
     def enter(self, row, pos, trd_price):
@@ -140,7 +166,9 @@ class Strategy:
         self.pos = pos
         self.price_enter = trd_price
         self.index_enter = row.name
-
+        self.index_open_max = row.name
+        self.index_open_min = row.name
+        
 
     def get_fee(self, price):
         return self.fee_lot + (self.fee_pct * price)
@@ -157,6 +185,10 @@ class InferenceStrategy(Strategy):
         if (test1 ^ test2) == 0:
             raise Exception('pass either `min_change` or `min_change_pct`')
 
+            
+    def prepare(self, data):
+        pass
+    
 
     def next(self, row):
         ch = self.y_pred[row.name] - row.open
@@ -181,7 +213,10 @@ class MeanReverseStrategy(Strategy):
         test2 = int(min_change_pct > 0)
         if (test1 ^ test2) == 0:
             raise Exception('pass either `min_change` or `min_change_pct`')
-
+    
+    def prepare(self, data):
+        pass
+    
 
     def next(self, row):
         y_mid = self.y_pred[row.name]
