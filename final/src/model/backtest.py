@@ -94,7 +94,16 @@ class Strategy:
         # run strategy for each data row
         data.apply(self.handle_next, axis=1)
         # close position at the end if present
-        self.close(data.iloc[-1])
+        if self.pos != 0:
+            self.close(data.iloc[-1])
+            self.equity[-1] = {
+                'pos': 0,
+                'pnl': self.pnl_real,
+                'pnl_open': 0,
+                'pnl_open_max': 0,
+                'pnl_open_min': 0,
+                'trd_cnt': len(self.trades)
+            }
         # compute statistics
         return StrategyResult(pd.DataFrame(self.trades),
                               pd.DataFrame(self.equity, index=data.index))
@@ -145,6 +154,7 @@ class Strategy:
         if self.pos != 0:
             trd_price = row.close if close_price == None else close_price
             fee = self.get_fee(self.price_enter) + self.get_fee(trd_price)
+            pnl = self.pos * (trd_price - self.price_enter)
             trd = {
                 'pos': self.pos,
                 'price_enter': self.price_enter,
@@ -154,7 +164,10 @@ class Strategy:
                 'index_max': self.index_open_max,
                 'index_min': self.index_open_min,
                 'fee': fee,
-                'pnl': (self.pos * (trd_price - self.price_enter)) - fee
+                'pnl': pnl,
+                'pnl_max': self.pnl_open_max,
+                'pnl_min': self.pnl_open_min,
+                'result': pnl - fee 
             }
             self.trades.append(trd)
             self.pnl_real += trd['pnl']
@@ -229,3 +242,29 @@ class MeanReverseStrategy(Strategy):
             self.sell(row, y_sell)
         
         self.close(row)
+        
+
+        
+class BenchmarkStrategy(Strategy):
+    def __init__(self, signal_name='y_pred', price_name='open'):
+        self.signal_name = signal_name
+        self.price_name = price_name
+        
+        
+    def prepare(self, data):
+        if not slef.signal_name in data.columns:
+            raise Exception('missing signal column')
+            
+        if not slef.price_name in data.columns:
+            raise Exception('missing price column')
+    
+
+    def next(self, row):
+        signal = row[self.signal_name]
+        price = row[self.price_name]
+        if signal > 0:
+            self.buy(row, price)
+        elif signal < 0:
+            self.sell(row, price)
+        else:
+            self.close(row, price)
