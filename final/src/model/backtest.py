@@ -32,12 +32,12 @@ class StrategyResult:
             self.net_profit = self.trades.pnl.sum()
             self.gross_profit = prof.pnl.sum()
             self.gross_loss = loss.pnl.sum()
-            self.max_draw = np.round(self.max_draw, 4)
-            self.profit_factor = np.round(self.gross_profit / -self.gross_loss, 4) if self.gross_loss < 0 else None
-            self.recovery_factor = np.round(self.net_profit / self.max_draw, 4) if self.max_draw > 0 else None
-            self.sharpe_ratio = np.round(self.net_profit / std, 4) if std > 0 else None
-            self.profit_trades = np.round(100.0 * len(prof) / cnt, 2)
-            self.loss_trades = np.round(100.0 * len(loss) / cnt, 2)
+            self.max_draw = self.max_draw
+            self.profit_factor = (self.gross_profit / -self.gross_loss) if self.gross_loss < 0 else None
+            self.recovery_factor = (self.net_profit / self.max_draw) if self.max_draw > 0 else None
+            self.sharpe_ratio = (self.net_profit / std) if std > 0 else None
+            self.profit_trades = (100.0 * len(prof) / cnt)
+            self.loss_trades = (100.0 * len(loss) / cnt)
 
 
     def get_max_draw(self, row):
@@ -51,16 +51,16 @@ class StrategyResult:
 
     def summary(self):
         if len(self.trades) > 0:
-            print(f'Net profit:      {self.net_profit}')
-            print(f'Gross profit:    {self.gross_profit}')
-            print(f'Gross loss:      {self.gross_loss}')
-            print(f'Max drawdown:    {self.max_draw}')
-            print(f'Profit factor:   {self.profit_factor}')
-            print(f'Recovery factor: {self.recovery_factor}')
-            print(f'Sharpe ratio:    {self.sharpe_ratio}')
-            print(f'Trades count:    {len(self.trades)}')
-            print(f'Profitale:       {self.profit_trades}%')
-            print(f'Losing:          {self.loss_trades}%')
+            print(f'Net profit:      {self.net_profit:12.2f}')
+            print(f'Gross profit:    {self.gross_profit:12.2f}')
+            print(f'Gross loss:      {self.gross_loss:12.2f}')
+            print(f'Max drawdown:    {self.max_draw:12.2f}')
+            print(f'Profit factor:   {self.profit_factor:12.2f}')
+            print(f'Recovery factor: {self.recovery_factor:12.2f}')
+            print(f'Sharpe ratio:    {self.sharpe_ratio:12.2f}')
+            print(f'Trades count:    {len(self.trades):12}')
+            print(f'Profitable:      {self.profit_trades:11.2f}%')
+            print(f'Losing:          {self.loss_trades:11.2f}%')
         else:
             print('There is no trades here')
 
@@ -244,23 +244,34 @@ class MeanReverseStrategy(Strategy):
         self.close(row)
         
 
-        
-class BenchmarkStrategy(Strategy):
-    def __init__(self, signal_name='y_pred', price_name='open'):
-        self.signal_name = signal_name
+class SignalStrategy(Strategy):
+    def __init__(self, signal, price_name='open'):
+        self.signal = signal
         self.price_name = price_name
         
-        
     def prepare(self, data):
-        if not slef.signal_name in data.columns:
-            raise Exception('missing signal column')
+        if type(self.signal) == str:
+            if not self.signal in data.columns:
+                raise Exception('missing signal column')
+                
+            self.next_signal = self.next_str
+        else:
+            self.next_signal = self.next_series
             
-        if not slef.price_name in data.columns:
+        if not self.price_name in data.columns:
             raise Exception('missing price column')
     
+    
+    def next_str(self, row):
+        return row[self.signal]
+    
+    
+    def next_series(self, row):
+        return self.signal[row.name]
 
+    
     def next(self, row):
-        signal = row[self.signal_name]
+        signal = self.next_signal(row)
         price = row[self.price_name]
         if signal > 0:
             self.buy(row, price)
