@@ -133,5 +133,6 @@ dmypy.json
 
 final/ticks/**
 final/bars/**
-
+final/src/model/catboost_info/**
+final/src/model/save/**
 final/**/apikey_*.py

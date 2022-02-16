@@ -22,16 +22,21 @@ class StrategyResult:
         self.sharpe_ratio = 0
         self.profit_trades = 0
         self.loss_trades = 0
+        self.raw_profit = 0
+        self.fee = 0
         # compute statistics
         cnt = len(self.trades)
         if cnt > 0:
+            temp = self.trades.result
             self.equity.apply(self.get_max_draw, axis=1)
-            prof = self.trades[self.trades.pnl > 0]
-            loss = self.trades[~(self.trades.pnl > 0)]
-            std = self.trades.pnl.std()
-            self.net_profit = self.trades.pnl.sum()
-            self.gross_profit = prof.pnl.sum()
-            self.gross_loss = loss.pnl.sum()
+            prof = temp[temp > 0]
+            loss = temp[~(temp > 0)]
+            std = temp.std()
+            self.net_profit = temp.sum()
+            self.raw_profit = self.trades.pnl.sum()
+            self.fee = self.trades.fee.sum()
+            self.gross_profit = prof.sum()
+            self.gross_loss = loss.sum()
             self.max_draw = self.max_draw
             self.profit_factor = (self.gross_profit / -self.gross_loss) if self.gross_loss < 0 else None
             self.recovery_factor = (self.net_profit / self.max_draw) if self.max_draw > 0 else None
@@ -51,19 +56,32 @@ class StrategyResult:
 
     def summary(self):
         if len(self.trades) > 0:
-            print(f'Net profit:      {self.net_profit:12.2f}')
-            print(f'Gross profit:    {self.gross_profit:12.2f}')
-            print(f'Gross loss:      {self.gross_loss:12.2f}')
-            print(f'Max drawdown:    {self.max_draw:12.2f}')
-            print(f'Profit factor:   {self.profit_factor:12.2f}')
-            print(f'Recovery factor: {self.recovery_factor:12.2f}')
-            print(f'Sharpe ratio:    {self.sharpe_ratio:12.2f}')
-            print(f'Trades count:    {len(self.trades):12}')
-            print(f'Profitable:      {self.profit_trades:11.2f}%')
-            print(f'Losing:          {self.loss_trades:11.2f}%')
+            print(f'Net profit:      {self.net_profit:12.2f}     Gross profit:    {self.gross_profit:12.2f}')
+            print(f'Raw profit:      {self.raw_profit:12.2f}     Gross loss:      {self.gross_loss:12.2f}')
+            print(f'Fee paid:        {self.fee:12.2f}     Max drawdown:    {self.max_draw:12.2f}')
+            print(f'Trades count:    {len(self.trades):12}     Profit factor:   {self.profit_factor:12.2f}')
+            print(f'Profitable:      {self.profit_trades:11.2f}%     Recovery factor: {self.recovery_factor:12.2f}')
+            print(f'Losing:          {self.loss_trades:11.2f}%     Sharpe ratio:    {self.sharpe_ratio:12.2f}')
         else:
             print('There is no trades here')
+            
+    
+    def best_pos(self, min_bars_held=0):
+        def fix_trade(t, target, mbh):
+            enter = t.index_enter
+            imax = t.index_max
+            start = imax + 1
+            end = t.index_exit
+            if start < end:
+                target.loc[start:end] = 0
+                
+            if (imax - enter) < mbh:
+                target.loc[enter:imax] = 0
 
+        fix_pos = self.equity.pos.copy()
+        self.trades.apply(fix_trade, axis=1, target=fix_pos, mbh = min_bars_held)
+        return fix_pos
+    
 
 class Strategy:    
     def reset_pos(self):
@@ -186,67 +204,11 @@ class Strategy:
     def get_fee(self, price):
         return self.fee_lot + (self.fee_pct * price)
 
-
-
-class InferenceStrategy(Strategy):
-    def __init__(self, y_pred, min_change=0, min_change_pct=0):
-        self.y_pred = y_pred
-        self.min_change = min_change
-        self.min_change_pct = min_change_pct / 100.0
-        test1 = int(min_change > 0)
-        test2 = int(min_change_pct > 0)
-        if (test1 ^ test2) == 0:
-            raise Exception('pass either `min_change` or `min_change_pct`')
-
             
-    def prepare(self, data):
-        pass
-    
-
-    def next(self, row):
-        ch = self.y_pred[row.name] - row.open
-        min_ch = self.min_change + (row.open * self.min_change_pct)
-        if (ch > min_ch):
-            print(f'buy at {row.name} -> {row.open}')
-            self.buy(row, row.open)
-        elif (ch < -min_ch):
-            print(f'sell at {row.name} -> {row.open}')
-            self.sell(row, row.open)
-        else:
-            self.close(row, row.open)
-
-
-
-class MeanReverseStrategy(Strategy):
-    def __init__(self, y_pred, min_change=0, min_change_pct=0):
-        self.y_pred = y_pred
-        self.min_change = min_change
-        self.min_change_pct = min_change_pct / 100.0
-        test1 = int(min_change > 0)
-        test2 = int(min_change_pct > 0)
-        if (test1 ^ test2) == 0:
-            raise Exception('pass either `min_change` or `min_change_pct`')
-    
-    def prepare(self, data):
-        pass
-    
-
-    def next(self, row):
-        y_mid = self.y_pred[row.name]
-        y_sell = round_pred(y_mid * (1.0 + self.min_change_pct) + self.min_change)
-        y_buy = round_pred(y_mid * (1.0 - self.min_change_pct) - self.min_change)
-        if (row.low <= y_buy):
-            self.buy(row, y_buy)
-            
-        if (row.high >= y_sell):
-            self.sell(row, y_sell)
-        
-        self.close(row)
-        
-
 class SignalStrategy(Strategy):
-    def __init__(self, signal, price_name='open'):
+    def __init__(self, signal, shift=0, price_name='open'):
         self.signal = signal
+        self.shift = shift
         self.price_name = price_name
         
     def prepare(self, data):
@@ -254,9 +216,21 @@ class SignalStrategy(Strategy):
             if not self.signal in data.columns:
                 raise Exception('missing signal column')
                 
+            self.shift = 0                
             self.next_signal = self.next_str
-        else:
+        elif isinstance(self.signal, pd.Series):
             self.next_signal = self.next_series
+        elif isinstance(self.signal, np.ndarray):
+            self.signal = pd.Series(data=self.signal, index=data.index)
+            self.next_signal = self.next_series
+        elif callable(getattr(self.signal, 'predict', None)):
+            self.signal = pd.Series(data=self.signal.predict(data), index=data.index)
+            self.next_signal = self.next_series
+        else:
+            raise Exception('unsupported signal type')
+        
+        if self.shift != 0:
+            self.signal = self.signal.shift(self.shift).fillna(0)
             
         if not self.price_name in data.columns:
             raise Exception('missing price column')
