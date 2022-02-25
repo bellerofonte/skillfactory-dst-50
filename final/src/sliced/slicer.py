@@ -15,6 +15,7 @@ def slice_ticks(data, freq):
         # compute some basic stats
         sum_vol = r_size.sum()
         net_size = r_size * r_side
+        net_vol = net_size.sum()
         open = r_price.iloc[0]
         close = r_price.iloc[-1]
         upper = max(open, close)
@@ -44,10 +45,11 @@ def slice_ticks(data, freq):
             'up_sum_vol': np.round(r_size[up_idx].sum(), 3),
             'md_sum_vol': np.round(r_size[md_idx].sum(), 3),
             'lo_sum_vol': np.round(r_size[lo_idx].sum(), 3),
-            'net_vol': np.round(net_size.sum(), 3),
+            'net_vol': np.round(net_vol, 3),
             'up_net_vol': np.round(net_size[up_idx].sum(), 3),
             'md_net_vol': np.round(net_size[md_idx].sum(), 3),
             'lo_net_vol': np.round(net_size[lo_idx].sum(), 3),
+            'oto': np.round(net_vol / sum_vol, 2),
             'cnt': r_price.count(),
             'hbl': (r_price.idxmax() < r_price.idxmin())
         }
