@@ -20,14 +20,18 @@ class StrategyResult:
         self.profit_factor = 0
         self.recovery_factor = 0
         self.sharpe_ratio = 0
+        self.my_ratio = 0
         self.profit_trades = 0
         self.loss_trades = 0
         self.raw_profit = 0
+        self.ppt = 0
+        self.pppt = 0
         self.fee = 0
         # compute statistics
-        cnt = len(self.trades)
+        cnt = len(trades)
         if cnt > 0:
-            temp = self.trades.result
+            temp = trades.result
+            avg_price = np.mean(trades.price_enter + trades.price_exit) / 2.0
             self.equity.apply(self.get_max_draw, axis=1)
             prof = temp[temp > 0]
             loss = temp[~(temp > 0)]
@@ -38,11 +42,14 @@ class StrategyResult:
             self.gross_profit = prof.sum()
             self.gross_loss = loss.sum()
             self.max_draw = self.max_draw
-            self.profit_factor = (self.gross_profit / -self.gross_loss) if self.gross_loss < 0 else None
-            self.recovery_factor = (self.net_profit / self.max_draw) if self.max_draw > 0 else None
-            self.sharpe_ratio = (self.net_profit / std) if std > 0 else None
+            self.profit_factor = (self.gross_profit / -self.gross_loss) if self.gross_loss < 0 else np.inf
+            self.recovery_factor = (self.net_profit / self.max_draw) if self.max_draw > 0 else np.inf
+            self.sharpe_ratio = (self.net_profit / std) if std > 0 else np.inf
             self.profit_trades = (100.0 * len(prof) / cnt)
             self.loss_trades = (100.0 * len(loss) / cnt)
+            self.ppt = self.net_profit / cnt
+            self.pppt = 100.0 * self.ppt / avg_price
+            self.my_ratio = np.sign(self.net_profit) * np.log(1 + (self.sharpe_ratio * self.pppt))
 
 
     def get_max_draw(self, row):
@@ -55,13 +62,15 @@ class StrategyResult:
 
 
     def summary(self):
-        if len(self.trades) > 0:
+        trd_cnt = len(self.trades)
+        if trd_cnt > 0:
             print(f'Net profit:      {self.net_profit:12.2f}     Gross profit:    {self.gross_profit:12.2f}')
             print(f'Raw profit:      {self.raw_profit:12.2f}     Gross loss:      {self.gross_loss:12.2f}')
             print(f'Fee paid:        {self.fee:12.2f}     Max drawdown:    {self.max_draw:12.2f}')
-            print(f'Trades count:    {len(self.trades):12}     Profit factor:   {self.profit_factor:12.2f}')
+            print(f'Trades count:    {trd_cnt:12}     Profit factor:   {self.profit_factor:12.2f}')
             print(f'Profitable:      {self.profit_trades:11.2f}%     Recovery factor: {self.recovery_factor:12.2f}')
             print(f'Losing:          {self.loss_trades:11.2f}%     Sharpe ratio:    {self.sharpe_ratio:12.2f}')
+            print(f'PPT %:           {self.pppt:11.2f}%     My ratio:        {self.my_ratio:12.2f}')
         else:
             print('There is no trades here')
             
