@@ -8,10 +8,10 @@ import hmac
 from apikey_bitmex import API_KEY, API_SECRET
 
 BASE_URL = 'https://www.bitmex.com'
-DATE_FROM = pd.Timestamp('2021-01-01')
-DATE_TILL = pd.Timestamp('2022-01-30')
+DATE_FROM = pd.Timestamp('2022-01-30')
+DATE_TILL = pd.Timestamp('2022-08-04')
 SYMBOLS = ['XBTUSD', 'ETHUSD']
-PATH = '../../ticks/bitmex/'
+PATH = os.path.abspath(os.path.dirname(__file__) + '../../../ticks/bitmex')
 DEFAULT_WAIT = 0.5
 
 # %%
@@ -82,13 +82,13 @@ def make_df(items):
 # %%
 def save_day(symbol, date, items):
     ds = date.strftime('%Y-%m-%d')
-    filename = PATH + f'{symbol}/{ds}.csv'
+    filename = f'{PATH}/{symbol}/{ds}.csv'
     df = make_df(items)
     df.to_csv(filename, date_format='%Y-%m-%d %H:%M:%S.%f', index=False)
 
 # %%
 for symbol in SYMBOLS:
-    os.makedirs(PATH + symbol, exist_ok=True)
+    os.makedirs(f'{PATH}/{symbol}', exist_ok=True)
     
 date = DATE_FROM
 while date <= DATE_TILL:

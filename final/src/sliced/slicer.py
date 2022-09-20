@@ -4,7 +4,7 @@ import numpy as np
 PRICE_DEC = 1
 SIZE_DEC = 3
 
-def slice_ticks(data, freq):
+def slice_ticks(data, freq, price_step=0.5, size_step=1.0, price_dec=PRICE_DEC, size_dec=SIZE_DEC, hist=True):
     temp = data.timestamp.dt.floor(freq=freq)
     items = []
     for key, rows in data.groupby(temp):
@@ -17,6 +17,8 @@ def slice_ticks(data, freq):
         net_size = r_size * r_side
         net_vol = net_size.sum()
         open = r_price.iloc[0]
+        high = r_price.max()
+        low = r_price.min()
         close = r_price.iloc[-1]
         upper = max(open, close)
         lower = min(open, close)
@@ -26,21 +28,17 @@ def slice_ticks(data, freq):
         lo_idx = rows[r_price < lower].index
         # buy_rows = rows[r_side > 0]
         # sell_rows = rows[r_side < 0]
+        
+
         item = {
             'time': key,
             'open': open,
-            'high': r_price.max(),
-            'low': r_price.min(),
+            'high': high,
+            'low': low,
             'close': close,
-            'avg': np.round(r_price.mean(), PRICE_DEC),
-            'wavg': np.round((r_price * r_size).sum() / sum_vol, PRICE_DEC),
+            'avg': np.round(r_price.mean(), price_dec),
+            'wavg': np.round((r_price * r_size).sum() / sum_vol, price_dec),
             'median': r_price.median(),
-            # 'buy_avg': np.round(buy_rows['price'].mean(), PRICE_DEC),
-            # 'buy_wavg': np.round((buy_rows['price'] * buy_rows['size']).sum() / buy_rows['size'].sum(), PRICE_DEC),
-            # 'buy_median': buy_rows.price.median(),
-            # 'sell_avg': np.round(sell_rows['price'].mean(), PRICE_DEC),
-            # 'sell_wavg': np.round((sell_rows['price'] * sell_rows['size']).sum() / sell_rows['size'].sum(), PRICE_DEC),
-            # 'sell_median': sell_rows.price.median(),
             'sum_vol': np.round(sum_vol, 3),
             'up_sum_vol': np.round(r_size[up_idx].sum(), 3),
             'md_sum_vol': np.round(r_size[md_idx].sum(), 3),
@@ -55,6 +53,21 @@ def slice_ticks(data, freq):
         }
         if abs(item['sum_vol'] - item['up_sum_vol'] - item['md_sum_vol'] - item['lo_sum_vol']) > 0.000001:
             print('something wrong:', key)
+
+        if hist:
+            def make_vol_hist(row, vhb, vhs, price_step, vol_step):
+                side_ = int(row['side'] > 0) # 1 for buy and 0 for sell
+                size_ = int(row['size'] / vol_step)
+                idx_ = int((row['price'] - low) / price_step)
+                vhb[idx_] += (size_ * side_)
+                vhs[idx_] += (size_ * (1 - side_))
+
+            hist_len = 1 + int((high - low) / price_step)
+            hist_b = np.zeros(hist_len, np.int32)
+            hist_s = np.zeros(hist_len, np.int32)
+            rows.apply(lambda r: make_vol_hist(r, hist_b, hist_s, price_step, size_step), axis=1)
+            item['vhb'] = hist_b
+            item['vhs'] = hist_s
         
         items.append(item)
 
