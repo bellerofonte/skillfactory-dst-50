@@ -46,7 +46,7 @@ for sym in SYMBOLS:
         dfs_f = [d1[f] for d1 in dfs]
         df_all = pd.concat(dfs_f, ignore_index=True, axis=0) if len(dfs_f) > 0 else pd.DataFrame()
         df_all.sort_values(by='time', ignore_index=True, inplace=True)
-        filename = f'{BARS_PATH}/bitmex-{sym}-{f}.csv'
+        filename = f'{BARS_PATH}/bitmex-{symbol}-{f}.csv.zip'
         print(f'writing output to \'{filename}\'')
         df_all.to_csv(filename, date_format='%Y-%m-%d %H:%M:%S', index=False, compression='zip')
 
